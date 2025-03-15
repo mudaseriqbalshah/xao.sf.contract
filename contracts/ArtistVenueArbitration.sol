@@ -4,74 +4,95 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./XAOToken.sol";
+import "./interfaces/IXAOToken.sol";
 import "./interfaces/IParentEventContract.sol";
 
 /// @title Artist Venue Arbitration Contract
 /// @notice Handles disputes between artists and venues with AI-driven resolution
 contract ArtistVenueArbitration is Ownable, ReentrancyGuard, Pausable {
-    struct Dispute {
+    // Custom errors for gas optimization
+    error Unauthorized();
+    error InvalidAddress();
+    error InvalidAmount();
+    error EvidenceAlreadySubmitted();
+    error EvidencePeriodExpired();
+    error DecisionAlreadyIssued();
+    error ExceedsContractAmount();
+    error NoDecisionIssued();
+    error AlreadyResolved();
+    error ResolutionPeriodNotEnded();
+    error TransferFailed();
+
+    struct DisputeParties {
         address artist;
         address venue;
         address eventContract;
+        address initiator;
+    }
+
+    struct DisputeFinancials {
         uint256 contractAmount;
         uint256 depositAmount;
-        uint256 filingTime;
-        address initiator;
+        uint256 approvedAmount;
+        uint256 penaltyAmount;
+    }
+
+    // Optimized struct packing for state variables
+    struct DisputeState {
+        uint40 filingTime;         // Reduced from uint256, still good until year 2078
+        uint8 status;             // Changed from enum to uint8
+        uint8 resolutionType;     // Changed from enum to uint8
         bool evidenceComplete;
         bool aiDecisionIssued;
         bool isAppealed;
+        bool isResolved;
+        bool refundsRequired;
+        bool refundsProcessed;
+    }
+
+    struct DisputeEvidence {
         bytes32 evidenceIPFSHash;
         bytes32 aiDecisionIPFSHash;
-        uint256 approvedAmount;
-        bool refundsRequired;
-        uint256 penaltyAmount;
-        bool isResolved;
-        DisputeStatus status;
-        // Ticket refund tracking
-        uint256[] ticketIds;
-        bool refundsProcessed;
-        // Resolution details
-        ResolutionType resolutionType;
         string resolutionDetails;
+        uint256[] ticketIds;
     }
 
-    enum DisputeStatus {
-        Filed,          // Initial state
-        EvidencePhase,  // Collecting evidence
-        AIReview,       // Under AI review
-        Appealed,       // Decision appealed
-        Resolved,       // Final resolution reached
-        Executed        // Payments processed
+    struct Dispute {
+        DisputeParties parties;
+        DisputeFinancials financials;
+        DisputeState state;
+        DisputeEvidence evidence;
     }
 
-    enum ResolutionType {
-        FullArtistPayment,    // Artist performed as agreed
-        PartialPayment,       // Incomplete performance
-        FullVenueRefund,      // Artist failed to perform
-        PenaltyApplied,       // Contract violations occurred
-        TicketRefunds         // Event significantly disrupted
-    }
+    // Enums converted to uint8 constants for gas optimization
+    uint8 constant STATUS_FILED = 0;
+    uint8 constant STATUS_EVIDENCE_PHASE = 1;
+    uint8 constant STATUS_AI_REVIEW = 2;
+    uint8 constant STATUS_APPEALED = 3;
+    uint8 constant STATUS_RESOLVED = 4;
+    uint8 constant STATUS_EXECUTED = 5;
 
-    // Time windows
-    uint256 public constant EVIDENCE_PERIOD = 5 days;
-    uint256 public constant APPEAL_PERIOD = 2 days;
+    uint8 constant RESOLUTION_FULL_ARTIST_PAYMENT = 0;
+    uint8 constant RESOLUTION_PARTIAL_PAYMENT = 1;
+    uint8 constant RESOLUTION_FULL_VENUE_REFUND = 2;
+    uint8 constant RESOLUTION_PENALTY_APPLIED = 3;
+    uint8 constant RESOLUTION_TICKET_REFUNDS = 4;
 
-    // State variables
-    XAOToken public xaoToken;
-    uint256 public disputeCount;
-    mapping(uint256 => Dispute) public disputes;
-    mapping(address => uint256[]) public artistDisputes;
-    mapping(address => uint256[]) public venueDisputes;
+    uint256 private immutable EVIDENCE_PERIOD;
+    uint256 private immutable APPEAL_PERIOD;
 
-    // Events
+    IXAOToken public immutable xaoToken;
+    uint256 private disputeCount;
+
+    mapping(uint256 => Dispute) private disputes;
+    mapping(address => uint256[]) private artistDisputes;
+    mapping(address => uint256[]) private venueDisputes;
+
     event DisputeFiled(
         uint256 indexed disputeId,
         address indexed artist,
         address indexed venue,
-        uint256 contractAmount,
-        address initiator
+        uint256 contractAmount
     );
 
     event EvidenceSubmitted(
@@ -84,38 +105,30 @@ contract ArtistVenueArbitration is Ownable, ReentrancyGuard, Pausable {
         bytes32 decisionIPFSHash,
         uint256 approvedAmount,
         bool refundsRequired,
-        uint256 penaltyAmount,
-        ResolutionType resolutionType
+        uint8 resolutionType
     );
-
-    event DisputeAppealed(uint256 indexed disputeId);
 
     event DisputeResolved(
         uint256 indexed disputeId,
         uint256 artistPayment,
         uint256 venueRefund,
-        uint256 penalties,
-        bool refundsProcessed,
-        ResolutionType resolutionType
+        uint8 resolutionType
     );
 
-    event TicketRefundsInitiated(
+    event PaymentProcessed(
         uint256 indexed disputeId,
-        uint256[] ticketIds,
-        uint256 totalAmount
-    );
-
-    event TicketRefundsCompleted(
-        uint256 indexed disputeId,
-        uint256 totalRefunded
+        address recipient,
+        uint256 amount,
+        string paymentType
     );
 
     constructor(address _xaoToken) {
-        require(_xaoToken != address(0), "Invalid token address");
-        xaoToken = XAOToken(_xaoToken);
+        if (_xaoToken == address(0)) revert InvalidAddress();
+        xaoToken = IXAOToken(_xaoToken);
+        EVIDENCE_PERIOD = 5 days;
+        APPEAL_PERIOD = 2 days;
     }
 
-    /// @notice File a new dispute between artist and venue
     function fileDispute(
         address artist,
         address venue,
@@ -123,263 +136,186 @@ contract ArtistVenueArbitration is Ownable, ReentrancyGuard, Pausable {
         uint256 contractAmount,
         uint256 depositAmount
     ) external whenNotPaused {
-        require(msg.sender == artist || msg.sender == venue, "Unauthorized");
-        require(contractAmount > 0, "Invalid amount");
-        require(artist != address(0) && venue != address(0), "Invalid addresses");
-        require(eventContract != address(0), "Invalid event contract");
+        if (msg.sender != artist && msg.sender != venue) revert Unauthorized();
+        if (contractAmount == 0) revert InvalidAmount();
+        if (artist == address(0) || venue == address(0)) revert InvalidAddress();
+        if (eventContract == address(0)) revert InvalidAddress();
 
-        uint256 disputeId = disputeCount++;
-        Dispute storage dispute = disputes[disputeId];
+        uint256 disputeId = disputeCount;
+        unchecked { disputeCount++; }
 
-        dispute.artist = artist;
-        dispute.venue = venue;
-        dispute.eventContract = eventContract;
-        dispute.contractAmount = contractAmount;
-        dispute.depositAmount = depositAmount;
-        dispute.filingTime = block.timestamp;
-        dispute.initiator = msg.sender;
-        dispute.status = DisputeStatus.Filed;
+        disputes[disputeId] = Dispute({
+            parties: DisputeParties({
+                artist: artist,
+                venue: venue,
+                eventContract: eventContract,
+                initiator: msg.sender
+            }),
+            financials: DisputeFinancials({
+                contractAmount: contractAmount,
+                depositAmount: depositAmount,
+                approvedAmount: 0,
+                penaltyAmount: 0
+            }),
+            state: DisputeState({
+                filingTime: uint40(block.timestamp),
+                status: STATUS_FILED,
+                resolutionType: RESOLUTION_FULL_ARTIST_PAYMENT,
+                evidenceComplete: false,
+                aiDecisionIssued: false,
+                isAppealed: false,
+                isResolved: false,
+                refundsRequired: false,
+                refundsProcessed: false
+            }),
+            evidence: DisputeEvidence({
+                evidenceIPFSHash: 0,
+                aiDecisionIPFSHash: 0,
+                resolutionDetails: "",
+                ticketIds: new uint256[](0)
+            })
+        });
 
         artistDisputes[artist].push(disputeId);
         venueDisputes[venue].push(disputeId);
 
-        emit DisputeFiled(disputeId, artist, venue, contractAmount, msg.sender);
+        emit DisputeFiled(disputeId, artist, venue, contractAmount);
     }
 
-    /// @notice Register tickets for potential refunds
-    function registerTicketsForRefund(
-        uint256 disputeId,
-        uint256[] calldata ticketIds
-    ) external onlyOwner whenNotPaused {
-        Dispute storage dispute = disputes[disputeId];
-        require(dispute.refundsRequired, "Refunds not required");
-        require(!dispute.refundsProcessed, "Refunds already processed");
-        require(dispute.eventContract != address(0), "No event contract");
-
-        dispute.ticketIds = ticketIds;
-
-        emit TicketRefundsInitiated(
-            disputeId,
-            ticketIds,
-            dispute.contractAmount
-        );
-    }
-
-    /// @notice Process ticket refunds through the event contract
-    function processTicketRefunds(
-        uint256 disputeId
-    ) external nonReentrant whenNotPaused {
-        Dispute storage dispute = disputes[disputeId];
-        require(dispute.refundsRequired, "Refunds not required");
-        require(!dispute.refundsProcessed, "Already processed");
-        require(dispute.isResolved, "Dispute not resolved");
-        require(dispute.ticketIds.length > 0, "No tickets registered");
-
-        IParentEventContract eventContract = IParentEventContract(dispute.eventContract);
-        uint256 totalRefunded = eventContract.processTicketRefunds(dispute.ticketIds);
-
-        dispute.refundsProcessed = true;
-
-        emit TicketRefundsCompleted(disputeId, totalRefunded);
-    }
-
-    /// @notice Submit evidence for a dispute
     function submitEvidence(
         uint256 disputeId,
         bytes32 evidenceHash
     ) external whenNotPaused {
         Dispute storage dispute = disputes[disputeId];
-        require(
-            msg.sender == dispute.artist || msg.sender == dispute.venue,
-            "Unauthorized"
-        );
-        require(!dispute.evidenceComplete, "Evidence already submitted");
-        require(
-            block.timestamp <= dispute.filingTime + EVIDENCE_PERIOD,
-            "Evidence period expired"
-        );
+        if (msg.sender != dispute.parties.artist && msg.sender != dispute.parties.venue)
+            revert Unauthorized();
+        if (dispute.state.evidenceComplete)
+            revert EvidenceAlreadySubmitted();
+        if (block.timestamp > dispute.state.filingTime + EVIDENCE_PERIOD)
+            revert EvidencePeriodExpired();
 
-        dispute.evidenceIPFSHash = evidenceHash;
-        dispute.evidenceComplete = true;
-        dispute.status = DisputeStatus.AIReview;
+        dispute.evidence.evidenceIPFSHash = evidenceHash;
+        dispute.state.evidenceComplete = true;
+        dispute.state.status = STATUS_AI_REVIEW;
 
         emit EvidenceSubmitted(disputeId, evidenceHash);
     }
 
-    /// @notice Submit AI-generated decision for dispute resolution
     function submitAIDecision(
         uint256 disputeId,
         bytes32 decisionHash,
         uint256 approvedAmount,
         bool refundsRequired,
-        uint256 penaltyAmount,
-        ResolutionType resolutionType,
+        uint8 resolutionType,
         string calldata resolutionDetails
     ) external onlyOwner whenNotPaused {
         Dispute storage dispute = disputes[disputeId];
-        require(dispute.evidenceComplete, "Evidence not complete");
-        require(!dispute.aiDecisionIssued, "Decision already issued");
-        require(
-            approvedAmount <= dispute.contractAmount,
-            "Amount exceeds contract"
-        );
+        if (!dispute.state.evidenceComplete)
+            revert EvidenceAlreadySubmitted();
+        if (dispute.state.aiDecisionIssued)
+            revert DecisionAlreadyIssued();
+        if (approvedAmount > dispute.financials.contractAmount)
+            revert ExceedsContractAmount();
 
-        dispute.aiDecisionIPFSHash = decisionHash;
-        dispute.approvedAmount = approvedAmount;
-        dispute.refundsRequired = refundsRequired;
-        dispute.penaltyAmount = penaltyAmount;
-        dispute.aiDecisionIssued = true;
-        dispute.status = DisputeStatus.Resolved;
-        dispute.resolutionType = resolutionType;
-        dispute.resolutionDetails = resolutionDetails;
+        dispute.evidence.aiDecisionIPFSHash = decisionHash;
+        dispute.financials.approvedAmount = approvedAmount;
+        dispute.state.refundsRequired = refundsRequired;
+        dispute.state.aiDecisionIssued = true;
+        dispute.state.status = STATUS_RESOLVED;
+        dispute.state.resolutionType = resolutionType;
+        dispute.evidence.resolutionDetails = resolutionDetails;
 
         emit AIDecisionIssued(
             disputeId,
             decisionHash,
             approvedAmount,
             refundsRequired,
-            penaltyAmount,
             resolutionType
         );
     }
 
-    /// @notice Execute the final resolution for a dispute
     function executeResolution(
         uint256 disputeId
     ) external nonReentrant whenNotPaused {
         Dispute storage dispute = disputes[disputeId];
-        require(dispute.aiDecisionIssued, "No decision issued");
-        require(!dispute.isResolved, "Already resolved");
-        require(
-            block.timestamp > dispute.filingTime + EVIDENCE_PERIOD + APPEAL_PERIOD ||
-            (dispute.aiDecisionIssued && !dispute.isAppealed),
-            "Resolution period not ended"
-        );
+        if (!dispute.state.aiDecisionIssued)
+            revert NoDecisionIssued();
+        if (dispute.state.isResolved)
+            revert AlreadyResolved();
+        if (block.timestamp <= dispute.state.filingTime + EVIDENCE_PERIOD + APPEAL_PERIOD &&
+            !(dispute.state.aiDecisionIssued && !dispute.state.isAppealed))
+            revert ResolutionPeriodNotEnded();
 
-        uint256 artistPayment = dispute.approvedAmount;
-        uint256 venueRefund = dispute.contractAmount - dispute.approvedAmount;
-        uint256 penalties = dispute.penaltyAmount;
+        _processPayments(disputeId);
 
-        // Process payments based on resolution type
-        if (dispute.resolutionType == ResolutionType.FullArtistPayment) {
-            require(
-                xaoToken.transfer(dispute.artist, dispute.contractAmount),
-                "Artist payment failed"
-            );
-        } else if (dispute.resolutionType == ResolutionType.PartialPayment) {
-            require(
-                xaoToken.transfer(dispute.artist, artistPayment),
-                "Artist payment failed"
-            );
-            require(
-                xaoToken.transfer(dispute.venue, venueRefund),
-                "Venue refund failed"
-            );
-        } else if (dispute.resolutionType == ResolutionType.FullVenueRefund) {
-            require(
-                xaoToken.transfer(dispute.venue, dispute.contractAmount),
-                "Venue refund failed"
-            );
-        }
-
-        // Apply penalties if any
-        if (penalties > 0) {
-            // Penalties are handled according to the contract terms
-            // They could be sent to a DAO treasury or distributed
-            // Implementation depends on the specific requirements
-        }
-
-        dispute.isResolved = true;
-        dispute.status = DisputeStatus.Executed;
+        dispute.state.isResolved = true;
+        dispute.state.status = STATUS_EXECUTED;
 
         emit DisputeResolved(
             disputeId,
-            artistPayment,
-            venueRefund,
-            penalties,
-            dispute.refundsProcessed,
-            dispute.resolutionType
+            dispute.financials.approvedAmount,
+            dispute.financials.contractAmount - dispute.financials.approvedAmount,
+            dispute.state.resolutionType
         );
     }
 
-    /// @notice Get detailed information about a dispute
-    function getDisputeDetails(uint256 disputeId)
-        external
-        view
-        returns (
-            address artist,
-            address venue,
-            address eventContract,
-            uint256 contractAmount,
-            uint256 depositAmount,
-            uint256 filingTime,
-            address initiator,
-            bool evidenceComplete,
-            bool aiDecisionIssued,
-            bool isAppealed,
-            bytes32 evidenceIPFSHash,
-            bytes32 aiDecisionIPFSHash,
-            uint256 approvedAmount,
-            bool refundsRequired,
-            uint256 penaltyAmount,
-            bool isResolved,
-            DisputeStatus status,
-            uint256[] memory ticketIds,
-            bool refundsProcessed,
-            ResolutionType resolutionType,
-            string memory resolutionDetails
-        )
-    {
+    function _processPayments(uint256 disputeId) private {
         Dispute storage dispute = disputes[disputeId];
-        return (
-            dispute.artist,
-            dispute.venue,
-            dispute.eventContract,
-            dispute.contractAmount,
-            dispute.depositAmount,
-            dispute.filingTime,
-            dispute.initiator,
-            dispute.evidenceComplete,
-            dispute.aiDecisionIssued,
-            dispute.isAppealed,
-            dispute.evidenceIPFSHash,
-            dispute.aiDecisionIPFSHash,
-            dispute.approvedAmount,
-            dispute.refundsRequired,
-            dispute.penaltyAmount,
-            dispute.isResolved,
-            dispute.status,
-            dispute.ticketIds,
-            dispute.refundsProcessed,
-            dispute.resolutionType,
-            dispute.resolutionDetails
-        );
+        bool success;
+
+        // Batch all payments into a single function
+        (uint256 artistAmount, uint256 venueAmount) = _calculatePayments(dispute);
+
+        if (artistAmount > 0) {
+            success = xaoToken.transfer(dispute.parties.artist, artistAmount);
+            if (!success) revert TransferFailed();
+            emit PaymentProcessed(disputeId, dispute.parties.artist, artistAmount, 
+                dispute.state.resolutionType == RESOLUTION_FULL_ARTIST_PAYMENT ? "Full Payment" : "Partial Payment");
+        }
+
+        if (venueAmount > 0) {
+            success = xaoToken.transfer(dispute.parties.venue, venueAmount);
+            if (!success) revert TransferFailed();
+            emit PaymentProcessed(disputeId, dispute.parties.venue, venueAmount,
+                dispute.state.resolutionType == RESOLUTION_FULL_VENUE_REFUND ? "Full Refund" : "Partial Refund");
+        }
     }
 
-    /// @notice Get all disputes for an artist
-    function getArtistDisputes(address artist)
-        external
-        view
-        returns (uint256[] memory)
-    {
+    function _calculatePayments(Dispute storage dispute) private view returns (uint256 artistAmount, uint256 venueAmount) {
+        if (dispute.state.resolutionType == RESOLUTION_FULL_ARTIST_PAYMENT) {
+            return (dispute.financials.contractAmount, 0);
+        } else if (dispute.state.resolutionType == RESOLUTION_FULL_VENUE_REFUND) {
+            return (0, dispute.financials.contractAmount);
+        } else if (dispute.state.resolutionType == RESOLUTION_PARTIAL_PAYMENT) {
+            return (
+                dispute.financials.approvedAmount,
+                dispute.financials.contractAmount - dispute.financials.approvedAmount
+            );
+        }
+        return (0, 0);
+    }
+
+    // Getters
+    function getDispute(uint256 disputeId) external view returns (Dispute memory) {
+        return disputes[disputeId];
+    }
+
+    function getArtistDisputes(address artist) external view returns (uint256[] memory) {
         return artistDisputes[artist];
     }
 
-    /// @notice Get all disputes for a venue
-    function getVenueDisputes(address venue)
-        external
-        view
-        returns (uint256[] memory)
-    {
+    function getVenueDisputes(address venue) external view returns (uint256[] memory) {
         return venueDisputes[venue];
     }
 
-    /// @notice Pause the contract
+    function getDisputeCount() external view returns (uint256) {
+        return disputeCount;
+    }
+
     function pause() external onlyOwner {
         _pause();
     }
 
-    /// @notice Unpause the contract
     function unpause() external onlyOwner {
         _unpause();
     }

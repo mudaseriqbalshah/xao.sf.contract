@@ -1,0 +1,11 @@
+[
+  {
+    "timestamp": "2025-03-15T21:45:44.571Z",
+    "network": "sepolia_base",
+    "contractAddress": "0x5Dd5b5Ed92Bc34c042a9CE97Ab179fce4909B64f",
+    "xaoTokenAddress": "0x7c1e98975539457A0F935155AAd295B5600E8917",
+    "deployerAccount": "0xc426A5300dCd57D8E448DAEda6FA1b583f36604E",
+    "networkId": 84532,
+    "gasPrice": "1001612"
+  }
+]

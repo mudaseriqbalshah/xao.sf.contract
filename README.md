@@ -209,34 +209,39 @@ Campaign management and AI-driven dispute resolution.
                                     │  Deployment  │
                                     └──────┬───────┘
                     ┌───────────────────┬──┴────┬───────────────┐
-            ┌───────┴──────┐    ┌──────┴───┐    └────┐    ┌─────┴─────┐
-            │  XAO Token   │    │Governance│         │    │  Treasury │
-            └──────────────┘    └──────────┘         │    └───────────┘
-                                                     │
-                                             ┌───────┴──────┐
-                                             │   Factory    │
-                                             │  Contracts   │
-                                             └──────┬───────┘
-                                         ┌─────────┴────────┐
-                                   ┌─────┴─────┐      ┌─────┴─────┐
-                                   │   Event   │      │   Artist  │
-                                   │  Factory  │      │  Factory  │
-                                   └───────────┘      └───────────┘
+            ┌───────┴──────┐    ┌──────┴───┐   └────┐    ┌─────┴─────┐
+            │  XAO Token   │    │Governance│        │    │  Treasury  │
+            └──────────────┘    └──────────┘        │    └───────────┘
+                                                    │
+                                            ┌───────┴──────┐
+                                            │   Factory    │
+                                            │  Contracts   │
+                                            └──────┬───────┘
+                                        ┌─────────┴────────┐
+                                  ┌─────┴─────┐      ┌─────┴─────┐
+                                  │   Event   │      │   Artist  │
+                                  │  Factory  │      │  Factory  │
+                                  └───────────┘      └───────────┘
 ```
 The deployment flow shows the hierarchical relationship between core system contracts. The XAO Token, Governance, and Treasury contracts form the foundation, while factory contracts enable the creation of event and artist instances.
+
+<details>
+<summary>View SVG Diagram</summary>
+<img src="attached_assets/deployment_flow.svg" alt="Contract Deployment Flow" />
+</details>
 
 ### 2. Event Creation Flow
 ```
 ┌─────────┐     ┌───────────────┐     ┌─────────────────┐
-│  Owner  │────▶│ Event Factory │────▶  Parent Event   │
+│  Owner  │────▶│ Event Factory │────▶│ Parent Event    │
 └─────────┘     └───────┬───────┘     └────────┬────────┘
-                        │                      │
-                        │                      ▼
+                        │                       │
+                        │                       ▼
                         │             ┌─────────────────┐
                         │             │  Event Explorer │
                         │             └────────┬────────┘
                         ▼                      │
-              ┌─────────────────┐              │
+              ┌─────────────────┐             │
               │ Artist Factory  │◀────────────┘
               └───────┬─────────┘
                       │
@@ -247,10 +252,15 @@ The deployment flow shows the hierarchical relationship between core system cont
 ```
 When creating a new event, the owner initiates the process through the Event Factory, which deploys a new Parent Event contract. The Event Explorer tracks this new event, and the Artist Factory creates associated artist contracts based on the event requirements.
 
+<details>
+<summary>View SVG Diagram</summary>
+<img src="attached_assets/event_creation_flow.svg" alt="Event Creation Flow" />
+</details>
+
 ### 3. Ticket Sales Flow
 ```
 ┌──────────┐    ┌────────────────┐    ┌───────────────┐
-│  Buyer   │───▶│ Parent Event   │───▶  ERC1155/721  │
+│  Buyer   │───▶│ Parent Event   │───▶│ ERC1155/721   │
 └──────────┘    │   Contract     │    │  Ticket NFT   │
                 └────────┬───────┘    └───────┬───────┘
                         │                     │
@@ -261,71 +271,73 @@ When creating a new event, the owner initiates the process through the Event Fac
 ```
 The ticket sales process starts with a buyer interacting with the Parent Event contract, which mints NFT tickets (either ERC1155 or ERC721). The Event Explorer tracks ticket availability and sales, while XAO Tokens handle the payment aspects.
 
+<details>
+<summary>View SVG Diagram</summary>
+<img src="attached_assets/ticket_sales_flow.svg" alt="Ticket Sales Flow" />
+</details>
+
 ### 4. Revenue Distribution Flow
 ```
-┌────────────────┐    ┌────────────────┐     ┌───────────────┐
-│  Ticket Sale   │───▶│ Parent Event   │───▶   XAO Treasury │
-└────────────────┘    │   Contract     │     └───────┬───────┘
-                      └────────┬───────┘             │
-                               │                     ▼
+┌────────────────┐    ┌────────────────┐    ┌───────────────┐
+│  Ticket Sale   │───▶│ Parent Event   │───▶│ XAO Treasury  │
+└────────────────┘    │   Contract     │    └───────┬───────┘
+                      └────────┬───────┘            │
+                              │                     ▼
                               ▼               ┌───────────────┐
-                      ┌────────────────┐      │Artist Contract│
-                      │Revenue Splitter│────▶     Escrow     │
-                      └────────────────┘      └───────────────┘
+                      ┌────────────────┐     │Artist Contract│
+                      │Revenue Splitter│────▶│    Escrow     │
+                      └────────────────┘     └───────────────┘
 ```
 After a ticket sale, the revenue flows through the Parent Event contract to the XAO Treasury. The Revenue Splitter then distributes the funds according to predefined shares, with artist payments held in escrow until performance obligations are met.
 
-### 5. Arbitration Flow
+<details>
+<summary>View SVG Diagram</summary>
+<img src="attached_assets/revenue_flow.svg" alt="Revenue Distribution Flow" />
+</details>
+
+### AI-Powered Arbitration Implementation
+
+The project uses Coinbase's CDP (Counterparty Decision Protocol) Agent for handling arbitration cases. The implementation is in TypeScript and consists of the following key components:
+
+#### Key Files
+- `services/arbitration-cdp-agent.ts`: Core CDP agent implementation
+- `services/arbitration-example.ts`: Example usage and testing
+- `global.d.ts`: Type definitions for CDP integration
+
+#### Environment Setup
+To use the CDP arbitration system, the following environment variables are required:
+```bash
+OPENAI_API_KEY=your_openai_api_key
+CDP_API_KEY_NAME=your_cdp_key_name
+CDP_API_KEY_PRIVATE_KEY=your_cdp_private_key
+NETWORK_ID=base-sepolia  # Optional, defaults to base-sepolia testnet
 ```
-┌──────────┐     ┌────────────────┐     ┌─────────────────┐
-│Campaign  │────▶│   Dispute      │────▶│  Evidence       │
-│Owner     │     │   Filing       │     │  Submission     │
-└──────────┘     └────────────────┘     └────────┬────────┘
-                                                 │
-                                                 ▼
-┌──────────┐     ┌────────────────┐     ┌───────────────┐
-│  Appeal  │◀────│ AI Decision    │◀────│ IPFS Evidence │
-│  Period  │     │ Generation     │     │   Storage     │
-└────┬─────┘     └────────────────┘     └───────────────┘
-     │
-     │           ┌────────────────┐     ┌───────────────┐
-     └──────────▶│    Final       │────▶│    Payout     │
-                 │  Resolution    │     │   Execution   │
-                 └────────────────┘     └───────────────┘
+
+#### Running the CDP Agent
+To test the CDP arbitration system:
+```bash
+cd services
+ts-node arbitration-example.ts
 ```
-The arbitration flow illustrates the dispute resolution process in the XAOMarketing contract. Campaign owners can file disputes, submit evidence (stored in IPFS), and receive AI-generated decisions. The process includes an appeal period, followed by final resolution and payout execution. All stages are time-bound and include multiple security checks.
 
-### Arbitration Process Details
+This will demonstrate:
+- Contract terms analysis
+- Evidence processing
+- AI-driven decision generation
+- Payment and penalty calculations
 
-#### 1. Dispute Filing
-- Campaign owner initiates dispute through `requestPayout` function
-- System validates campaign status and requested amount
-- Creates new dispute record with unique ID
-- Enforces cooling period between payout requests
+#### Architecture Diagrams
+The project includes automatically generated architecture diagrams using GraphViz. To regenerate the diagrams:
+```bash
+python3 generate_diagrams.py
+```
 
-#### 2. Evidence Submission
-- 5-day evidence submission period
-- Evidence stored as IPFS hashes for immutability
-- Only one complete evidence submission allowed
-- Verification of evidence completion status
-
-#### 3. AI Decision
-- Oracle-based AI decision generation
-- Decision stored as IPFS hash
-- Includes approved amount calculation
-- Multiple validation checks on decision integrity
-
-#### 4. Appeal Process
-- 2-day appeal window after AI decision
-- Single appeal allowed per dispute
-- Requires additional evidence submission
-- Automated deadline enforcement
-
-#### 5. Resolution and Payout
-- Automatic execution after appeal period
-- Validated payment processing
-- Updates campaign and dispute status
-- Final state verification
+This will create SVG diagrams in the `attached_assets` directory showing:
+- Deployment flow
+- Event creation flow
+- Ticket sales flow
+- Revenue distribution flow
+- Arbitration flow
 
 
 ## Contract Upgrade Patterns
@@ -511,14 +523,14 @@ describe("Contract", () => {
 - Truffle Framework
 - OpenZeppelin Contracts
 - Web3.js
-- Python (OpenAI Integration)
+- TypeScript (CDP Agent Implementation)
 
 ## Prerequisites
 - Node.js >= 16.0.0
 - Truffle Suite
 - Ganache CLI (for local development)
-- Python 3.11
-- OpenAI API Key
+- TypeScript
+
 
 ## Installation
 1. Clone the repository
@@ -535,6 +547,9 @@ npm install
 3. Set up environment variables
 ```bash
 OPENAI_API_KEY=your_api_key_here
+CDP_API_KEY_NAME=your_cdp_key_name
+CDP_API_KEY_PRIVATE_KEY=your_cdp_private_key
+NETWORK_ID=base-sepolia  # Optional, defaults to base-sepolia testnet
 ```
 
 4. Start local blockchain
@@ -566,7 +581,9 @@ npx truffle test
 │   └── XAOReferral.sol # Referral contract
 ├── migrations/         # Deployment scripts
 ├── services/          # Backend services
-│   └── referral_verification.py  # AI verification service
+│   └── arbitration-cdp-agent.ts
+│   └── arbitration-example.ts
+│   └── global.d.ts
 ├── test/              # Test files
 └── scripts/           # Utility scripts
 ```

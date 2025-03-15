@@ -50,11 +50,6 @@ contract ParentEventContract is IParentEventContract, ERC721, Ownable, Reentranc
     /// @notice Stores refund status for each token
     mapping(uint256 => bool) private refundProcessed;
 
-    /// @notice Event emitted when a ticket is refunded
-    event TicketRefunded(uint256 indexed tokenId, address indexed holder, uint256 amount);
-    /// @notice Event emitted when batch refunds are processed
-    event BatchRefundProcessed(uint256 startTokenId, uint256 endTokenId, uint256 totalRefunded);
-
 
     /// @notice Initializes a new event contract
     /// @dev Sets up the ERC721 token and links to the artist factory

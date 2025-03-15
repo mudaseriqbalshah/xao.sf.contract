@@ -6,53 +6,53 @@ module.exports = {
     development: {
       host: "127.0.0.1",
       port: 8545,
-      network_id: "*"
+      network_id: "*",
+      gas: 30000000,  // Increased gas limit
+      gasPrice: 20000000000
     },
-    sepolia: {
-      provider: () => new HDWalletProvider(
-        process.env.MNEMONIC,
-        process.env.SEPOLIA_RPC_URL
-      ),
-      network_id: 11155111,
-      gas: process.env.GAS_LIMIT || 5500000,
-      gasPrice: process.env.GAS_PRICE || 20000000000,
-      confirmations: 2,
-      timeoutBlocks: 200,
+    test: {
+      host: "127.0.0.1",
+      port: 9545,
+      network_id: "*",
+      gas: 30000000,  // Increased gas limit
+      gasPrice: 20000000000,
       skipDryRun: true
     },
-    base: {
-      // provider: () => new HDWalletProvider(MNEMONIC, `https://base-mainnet.infura.io/v3/${PROJECT_ID}`),
-      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY, `https://mainnet.base.org`),
-      network_id: 8453, // This network is yours, in the cloud.
-      timeoutBlocks: 20000, // # of blocks before a deployment times out  (minimum/default: 50)
-      skipDryRun: true, // Skip dry run before migrations? (default: false for public nets )
-    },
     sepolia_base: {
-      provider: () => new HDWalletProvider(
-        process.env.PRIVATE_KEY,
-        process.env.SEPOLIA_BASE_RPC_URL
-      ),
+      provider: () => new HDWalletProvider({
+        privateKeys: [process.env.PRIVATE_KEY],
+        providerOrUrl: `https://rpc.ankr.com/base_sepolia/d8b45c6ca36d9f7e8f419eaf46b61b646e579e1c2e724865e3a8da0a5974fd8f`,
+        pollingInterval: 8000,
+        shareNonce: true,
+        derivationPath: `m/44'/60'/0'/0/`
+      }),
       network_id: 84532,
-      gas: 15000000,
-      gasPrice: 15000000000,
-      confirmations: 2,
-      timeoutBlocks: 200,
+      gas: 5000000,               // Reduced gas limit
+      gasPrice: 1000000000,       // 1 gwei
+      confirmations: 5,           // Increased confirmations
+      timeoutBlocks: 500,         // Increased timeout blocks
       skipDryRun: true,
-      networkCheckTimeout: 10000,
-      // verify: {
-      //   apiUrl: 'https://api-sepolia.basescan.org/api',
-      //   apiKey: "17EM3GTF7UXCJGDAJP8UIYVTXHQGHEI5UN",
-      //   explorerUrl: 'https://sepolia.basescan.org/address',
-      // }
+      networkCheckTimeout: 60000, // Increased network timeout
+      verify: {
+        apiUrl: 'https://api-sepolia.basescan.org'
+      }
     }
   },
   compilers: {
     solc: {
       version: "0.8.19",
       settings: {
+        viaIR: true,  // Enable IR-based code generation
         optimizer: {
           enabled: true,
-          runs: 200
+          runs: 200,
+          details: {
+            yul: true,  // Enable Yul optimizer
+            yulDetails: {
+              stackAllocation: true,  // Enable stack allocation optimizations
+              optimizerSteps: "dhfoDgvulfnTUtnIf"  // Aggressive optimization
+            }
+          }
         }
       }
     }
@@ -60,10 +60,5 @@ module.exports = {
   plugins: ['truffle-plugin-verify'],
   api_keys: {
     basescan: process.env.BASESCAN_API_KEY
-  },
-  verify: {
-    proxy: {
-      host: 'https://api-sepolia.basescan.org'
-    }
   }
 };

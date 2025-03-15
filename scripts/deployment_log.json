@@ -1,0 +1,28 @@
+[
+  {
+    "contractName": "XAOToken",
+    "contractAddress": "0x0A0B8aDEcA228b30d60F540aA88b6610a6F1F49B",
+    "deployerAccount": "0xc426A5300dCd57D8E448DAEda6FA1b583f36604E",
+    "timestamp": "2025-03-15T22:16:21.160Z",
+    "network": "sepolia_base",
+    "networkId": 84532
+  },
+  {
+    "contractName": "ArtistFactory",
+    "contractAddress": "0xE10Aff9A69A8058CD3a8E66bB76B3b61bB40b69E",
+    "deployerAccount": "0xc426A5300dCd57D8E448DAEda6FA1b583f36604E",
+    "timestamp": "2025-03-15T22:16:25.863Z",
+    "network": "sepolia_base",
+    "networkId": 84532
+  },
+  {
+    "contractName": "EventFactory",
+    "contractAddress": "0xcF16D92296Ab0eb63E98b27d3945c643a9C4da6f",
+    "artistFactoryAddress": "0xE10Aff9A69A8058CD3a8E66bB76B3b61bB40b69E",
+    "eventCreationFee": "10000000000000000",
+    "deployerAccount": "0xc426A5300dCd57D8E448DAEda6FA1b583f36604E",
+    "timestamp": "2025-03-15T22:16:30.595Z",
+    "network": "sepolia_base",
+    "networkId": 84532
+  }
+]
