@@ -1,0 +1,46 @@
+Deployer: 0xc426A5300dCd57D8E448DAEda6FA1b583f36604E
+XAO Token: 0xAca8714208D513A7Ab1Aca45AE1dF0708B90eb5f
+XAO Staking: 0x075426dDE2341d56E1b37edfa975d8AcA2c87CBD
+ArtistFactory: 0x98b474B4faf1ee5Afa166F751d8fe6834747051B
+EventFactory: 0xfF5D175141a4e6653ec4582E80df02df84D5aaa6
+EventExplorer: 0x0b7F6bcf4651D044395fcfE1e1C7D5529f2cB709
+
+XAO Token: https://basescan.org/address/0x30E03DE11bF85aE24199967d39C761355d9B14c4#code
+ArtistFactory: https://sepolia.basescan.org/address/0x075426dDE2341d56E1b37edfa975d8AcA2c87CBD#code
+EventFactory: https://sepolia.basescan.org/address/0xfF5D175141a4e6653ec4582E80df02df84D5aaa6#code
+EventExplorer: https://sepolia.basescan.org/address/0x0b7F6bcf4651D044395fcfE1e1C7D5529f2cB709#code
+
+
+
+
+1_deploy_contracts.js
+=====================
+Deploying contracts with account: 0xc426A5300dCd57D8E448DAEda6FA1b583f36604E
+Network: base
+
+Deploying Core Contracts...
+
+   Deploying 'XAOToken'
+   --------------------
+   > transaction hash:    0x23af8e1ff3bd1e3c559f1842a3d8f81bf8de736f704df24132b118e46377a712
+   > Blocks: 0            Seconds: 0
+   > contract address:    0x30E03DE11bF85aE24199967d39C761355d9B14c4
+   > block number:        27032598
+   > block timestamp:     1740854543
+   > account:             0xc426A5300dCd57D8E448DAEda6FA1b583f36604E
+   > balance:             0.043390862635862395
+   > gas used:            1839983 (0x1c136f)
+   > gas price:           2.504909025 gwei
+   > value sent:          0 ETH
+   > total cost:          0.004608990022546575 ETH
+
+XAO Token deployed at: 0x30E03DE11bF85aE24199967d39C761355d9B14c4
+   > Saving artifacts
+   -------------------------------------
+   > Total cost:     0.004608990022546575 ETH
+
+Summary
+=======
+> Total deployments:   1
+> Final cost:          0.004608990022546575 ETH
+
